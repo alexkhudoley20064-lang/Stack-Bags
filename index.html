@@ -478,11 +478,17 @@
           return uid;
         })());
 
-    let myNickname = localStorage.getItem('stack-bags-nick') || (tg?.initDataUnsafe?.user?.first_name ? `@${tg.initDataUnsafe.user.first_name}` : 'Кассир #1');
+    // По умолчанию ник БЕЗ знака @ (чистое имя или 'Кассир #1')
+    let myNickname = localStorage.getItem('stack-bags-nick') || tg?.initDataUnsafe?.user?.first_name || 'Кассир #1';
     nickInput.value = myNickname;
     nickInput.addEventListener('input', () => {
       myNickname = nickInput.value.trim() || 'Кассир #1';
       localStorage.setItem('stack-bags-nick', myNickname);
+    });
+
+    // Блокируем всплытие клавиатурных событий из поля ввода ника (чтобы пробел не запускал игру!)
+    nickInput.addEventListener('keydown', (e) => {
+      e.stopPropagation();
     });
 
     // Отправка нового рекорда в Supabase
@@ -953,7 +959,7 @@
         state.best = state.score; 
         bestEl.textContent = state.best;
         try { localStorage.setItem('stack-bags-best', String(state.best)); } catch (_) {}
-        syncScoreToDB(state.best); // <-- ОТПРАВЛЯЕМ В ОБЛАКО
+        syncScoreToDB(state.best);
       }
 
       if (perfect) landed.scale.set(1.015,1,1.015);
@@ -1009,13 +1015,15 @@
       }, 750);
     }
 
+    // Поделиться приложением: отправляет ссылку на вашего бота @ChizhikcityGameBot
     shareBtn.addEventListener('click', () => {
-      const text = encodeURIComponent(`🛍️ Мой чек в «СТЭК БЭГС»: ${state.score} пакетов! (Серия комбо: ${state.maxCombo})\nСможешь собрать выше?`);
-      const url = encodeURIComponent(window.location.href);
+      const botUrl = encodeURIComponent('https://t.me/ChizhikcityGameBot');
+      const text = encodeURIComponent(`🛍️ Мой чек в «СТЭК БЭГС»: ${state.score} пакетов! (Серия комбо: ${state.maxCombo})\nСможешь собрать башню выше? Сыграй со мной! 👇`);
+      const shareLink = `https://t.me/share/url?url=${botUrl}&text=${text}`;
       if (tg?.openTelegramLink) {
-        tg.openTelegramLink(`https://t.me/share/url?url=${url}&text=${text}`);
+        tg.openTelegramLink(shareLink);
       } else {
-        window.open(`https://t.me/share/url?url=${url}&text=${text}`, '_blank');
+        window.open(shareLink, '_blank');
       }
     });
 
@@ -1028,7 +1036,9 @@
       if (state.running) placeBag();
     }, {passive:false});
 
+    // Обработка клавиш: игнорируем нажатия, если фокус в поле ввода ника
     addEventListener('keydown', e => { 
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (e.code==='Space' || e.code==='Enter') { 
         e.preventDefault(); 
         getAudio();
