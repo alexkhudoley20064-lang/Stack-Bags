@@ -368,6 +368,12 @@
   <script type="module">
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js';
 
+    // ==========================================
+    // ПОДКЛЮЧЕНИЕ ОБЛАЧНОЙ БАЗЫ ДАННЫХ (SUPABASE)
+    // ==========================================
+    const SUPABASE_URL = 'https://fmzgvxvzvcbyidblscfb.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_yFsNHLrM_G9MHR6KkBRCwg_VW4APum9';
+
     // ЗВУКОВОЙ ДВИЖОК
     let audioCtx = null;
     function getAudio() {
@@ -463,6 +469,15 @@
     const tg = window.Telegram?.WebApp;
     try { tg?.ready(); tg?.expand(); } catch (_) {}
 
+    // Уникальный ID игрока (из Telegram или случайный ключ устройства)
+    const myUserId = tg?.initDataUnsafe?.user?.id 
+      ? String(tg.initDataUnsafe.user.id) 
+      : (localStorage.getItem('stack-bags-uid') || (() => {
+          const uid = 'user_' + Math.random().toString(36).substring(2, 9);
+          localStorage.setItem('stack-bags-uid', uid);
+          return uid;
+        })());
+
     let myNickname = localStorage.getItem('stack-bags-nick') || (tg?.initDataUnsafe?.user?.first_name ? `@${tg.initDataUnsafe.user.first_name}` : 'Кассир #1');
     nickInput.value = myNickname;
     nickInput.addEventListener('input', () => {
@@ -470,36 +485,62 @@
       localStorage.setItem('stack-bags-nick', myNickname);
     });
 
-    const mockLeaders = [
-      { name: "@alex_cashier", score: 86 },
-      { name: "@anna_pro", score: 72 },
-      { name: "@max_express", score: 61 },
-      { name: "@dmitry_speed", score: 53 },
-      { name: "@elena_bags", score: 45 },
-      { name: "@ivan_retail", score: 38 },
-      { name: "@masha_check", score: 31 },
-      { name: "@vlad_stack", score: 24 },
-      { name: "@kate_fast", score: 18 }
-    ];
+    // Отправка нового рекорда в Supabase
+    async function syncScoreToDB(newScore) {
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/leaderboard?on_conflict=user_id`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates'
+          },
+          body: JSON.stringify({
+            user_id: myUserId,
+            username: myNickname,
+            score: newScore
+          })
+        });
+      } catch (e) {
+        console.warn('Ошибка отправки рекорда в Supabase:', e);
+      }
+    }
 
-    function renderLeaderboard() {
-      leadListContainer.innerHTML = '';
-      const list = [...mockLeaders, { name: `${myNickname} (Вы)`, score: state.best, isMe: true }];
-      list.sort((a,b) => b.score - a.score);
-      const top10 = list.slice(0, 10);
+    // Загрузка реального Топ-10 из Supabase
+    async function renderLeaderboard() {
+      leadListContainer.innerHTML = '<div style="text-align:center; padding:15px; color:#888;">Загрузка лидеров...</div>';
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/leaderboard?select=username,score&order=score.desc&limit=10`, {
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`
+          }
+        });
+        const top10 = await res.json();
+        leadListContainer.innerHTML = '';
 
-      top10.forEach((item, index) => {
-        const row = document.createElement('div');
-        row.className = `lead-item ${item.isMe ? 'me' : ''}`;
-        const medals = ['🥇', '🥈', '🥉'];
-        const rankStr = index < 3 ? medals[index] : `${index + 1}.`;
-        row.innerHTML = `
-          <span class="lead-rank">${rankStr}</span>
-          <span class="lead-name">${item.name}</span>
-          <span class="lead-pts">${item.score}</span>
-        `;
-        leadListContainer.appendChild(row);
-      });
+        if (!top10 || top10.length === 0) {
+          leadListContainer.innerHTML = '<div style="text-align:center; padding:15px; color:#888;">Пока нет рекордов. Будь первым!</div>';
+          return;
+        }
+
+        top10.forEach((item, index) => {
+          const isMe = item.username === myNickname;
+          const row = document.createElement('div');
+          row.className = `lead-item ${isMe ? 'me' : ''}`;
+          const medals = ['🥇', '🥈', '🥉'];
+          const rankStr = index < 3 ? medals[index] : `${index + 1}.`;
+          row.innerHTML = `
+            <span class="lead-rank">${rankStr}</span>
+            <span class="lead-name">${item.username}</span>
+            <span class="lead-pts">${item.score}</span>
+          `;
+          leadListContainer.appendChild(row);
+        });
+      } catch (e) {
+        leadListContainer.innerHTML = '<div style="text-align:center; padding:15px; color:#f87171;">Ошибка загрузки лидеров</div>';
+      }
     }
 
     openLeaderBtn.addEventListener('click', () => {
@@ -538,7 +579,7 @@
     floor.rotation.x = -Math.PI/2; floor.position.y = -0.56; floor.receiveShadow = true; scene.add(floor);
 
     // ==========================================
-    // КАССОВЫЙ БОКС + РАЗДЕЛИТЕЛЬ ПАРАЛЛЕЛЬНО БАШНЕ
+    // КАССОВЫЙ БОКС + ВЫТЯНУТЫЙ РАЗДЕЛИТЕЛЬ ПАРАЛЛЕЛЬНО БАШНЕ
     // ==========================================
     const deskGroup = new THREE.Group();
     const darkCabinetMat = new THREE.MeshStandardMaterial({color:0x1e2229, roughness:.75, metalness:.2});
@@ -907,10 +948,12 @@
       comboEl.textContent = perfect ? `КОМБО: ${state.combo}` : 'КОМБО: 0';
       try { tg?.HapticFeedback?.impactOccurred(perfect?'light':'medium'); } catch (_) {}
 
+      // СОХРАНЕНИЕ РЕКОРДА И СИНХРОНИЗАЦИЯ С SUPABASE
       if (state.score > state.best) {
         state.best = state.score; 
         bestEl.textContent = state.best;
         try { localStorage.setItem('stack-bags-best', String(state.best)); } catch (_) {}
+        syncScoreToDB(state.best); // <-- ОТПРАВЛЯЕМ В ОБЛАКО
       }
 
       if (perfect) landed.scale.set(1.015,1,1.015);
