@@ -1,0 +1,1054 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#17152b">
+  <title>Stack Bags 3D</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Google Fonts: шрифт табло покупателя (DotGothic16 / VT323) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=VT323&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; --ink:#F4F1EA; --glass:rgba(28,32,40,.82); }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html,body { margin:0; width:100%; height:100%; overflow:hidden; background:#17152b; font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif; color:var(--ink); touch-action:manipulation; }
+    #game { position:fixed; inset:0; }
+    canvas { display:block; width:100%; height:100%; touch-action:manipulation; }
+    
+    /* ================= ВЕРХНЕЕ ТАБЛО ОЧКОВ: ОБЪЕМНЫЙ ДИСПЛЕЙ ================= */
+    .hud { position:fixed; z-index:2; top:max(12px,env(safe-area-inset-top)); left:0; right:0; display:flex; justify-content:space-between; align-items:flex-start; padding:0 14px; pointer-events:none; gap:10px; }
+    
+    .vfd-display {
+      background: #e4dfcf;
+      background-image: 
+        radial-gradient(rgba(0, 0, 0, 0.05) 1.2px, transparent 1.2px),
+        linear-gradient(rgba(0,0,0,0.03) 50%, rgba(255,255,255,0.05) 50%);
+      background-size: 3px 3px, 100% 4px;
+      /* Объемный 3D-корпус */
+      border: 3.5px solid #1a1e25;
+      border-top-color: #2c323d;
+      border-bottom-color: #111317;
+      border-radius: 15px;
+      box-shadow: 
+        0 10px 24px rgba(0,0,0,0.6),
+        0 4px 0 #0d0f13,
+        inset 0 2px 4px rgba(0,0,0,0.22),
+        inset 0 -1.5px 2px rgba(255,255,255,0.6);
+      padding: 7px 15px;
+      position: relative;
+      min-width: 130px;
+    }
+    .vfd-label {
+      font-family: 'DotGothic16', 'VT323', monospace;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: #616775;
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 2px;
+    }
+    /* Черные цифры со свечением #FFFFF0 */
+    .vfd-score {
+      font-family: 'DotGothic16', 'VT323', monospace;
+      font-size: 28px;
+      line-height: 1.1;
+      font-weight: 900;
+      color: #111317;
+      text-shadow: 
+        0 0 6px #FFFFF0, 
+        0 0 12px rgba(255, 255, 240, 0.9),
+        0 0 20px rgba(255, 255, 240, 0.45);
+      display: inline-block;
+      transition: transform .12s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .vfd-score.bump { animation:vfdBump .24s ease-out; }
+
+    /* Цвет комбо идентичен надписи рекорд */
+    .vfd-sub {
+      font-family: 'DotGothic16', 'VT323', monospace;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: #616775;
+      margin-top: 2px;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .plus-one {
+      position:absolute; right:12px; top:-8px;
+      font-family: 'DotGothic16', monospace;
+      font-size:15px; font-weight:900; 
+      color:#111317;
+      text-shadow: 0 0 6px #FFFFF0, 0 0 10px #FFFFF0;
+      opacity:0; transform:translateY(0); pointer-events:none;
+    }
+    .plus-one.pop { animation:plusPop .48s ease-out forwards; }
+
+    @keyframes vfdBump {
+      0% { transform:scale(1); }
+      40% { transform:scale(1.24); color:#000; text-shadow:0 0 10px #FFFFF0, 0 0 18px #FFFFF0; }
+      100% { transform:scale(1); }
+    }
+    @keyframes plusPop {
+      0% { opacity:0; transform:translateY(4px) scale(.7); }
+      30% { opacity:1; transform:translateY(-12px) scale(1.15); }
+      100% { opacity:0; transform:translateY(-24px) scale(.9); }
+    }
+    
+    #hint { position:fixed; z-index:2; left:50%; transform:translateX(-50%); bottom:max(24px,env(safe-area-inset-bottom)); width:max-content; max-width:calc(100% - 32px); text-align:center; padding:12px 20px; border-radius:999px; background:var(--glass); border:1px solid rgba(255,191,0,.25); color:#F4F1EA; font-size:13.5px; font-weight:600; pointer-events:none; transition:opacity .25s, transform .25s; box-shadow:0 10px 25px rgba(0,0,0,.4); }
+
+    /* Оверлеи */
+    .modal-wrap { 
+      position:fixed; z-index:4; inset:0; display:flex; align-items:center; justify-content:center; padding:16px; 
+      background:linear-gradient(180deg,rgba(17,15,40,.65),rgba(23,21,43,.92)); 
+      backdrop-filter:blur(10px);
+      opacity:0; visibility:hidden; pointer-events:none;
+      transition:opacity .32s ease, visibility .32s ease;
+    }
+    .modal-wrap.active { opacity:1; visibility:visible; pointer-events:auto; }
+
+    /* ================= СПИСОК ПОКУПОК (SHOPPING LIST) ================= */
+    .shopping-list {
+      width:min(380px,100%);
+      background:#fbf8f1;
+      color:#21252d;
+      border-radius:20px;
+      padding:30px 22px 20px;
+      position:relative;
+      box-shadow:0 25px 70px rgba(0,0,0,.7), 0 0 40px rgba(255,191,0,.18);
+      background-image:repeating-linear-gradient(#fbf8f1, #fbf8f1 28px, #e8e2d4 29px);
+      transform:scale(.88) translateY(18px);
+      transition:transform .38s cubic-bezier(.16,1,.3,1);
+    }
+    .modal-wrap.active .shopping-list { transform:scale(1) translateY(0); }
+
+    .paper-clip {
+      position:absolute; top:-14px; left:32px; width:18px; height:44px;
+      border:3.5px solid #7c8392; border-radius:12px; border-bottom:0;
+      box-shadow:2px 4px 8px rgba(0,0,0,.28);
+    }
+    .menu-header { text-align:center; margin-bottom:12px; }
+    .menu-logo { font-size:36px; margin-bottom:2px; filter:drop-shadow(0 4px 10px rgba(0,0,0,.15)); }
+    .menu-title { font-size:29px; font-weight:900; letter-spacing:-.03em; color:#1a1d24; margin:0; }
+
+    .nick-box {
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px dashed #c8c0ae;
+      border-radius: 12px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .nick-box label { font-size: 12px; font-weight: 700; color: #585c67; flex-shrink: 0; }
+    .nick-input {
+      border: 0; background: transparent; font-size: 13.5px; font-weight: 800; color: #1a1d24;
+      width: 100%; outline: none; font-family: inherit;
+    }
+
+    .rules-list { display:flex; flex-direction:column; gap:7px; margin-bottom:14px; }
+    .rule-card {
+      background:rgba(255, 255, 255, 0.75);
+      border:1px dashed #d0c8b6;
+      border-radius:12px;
+      padding:8px 11px;
+      font-size:12px;
+      line-height:1.35;
+      color:#23262e;
+      display:flex;
+      align-items:center;
+      gap:9px;
+      font-weight:600;
+    }
+    .rule-num {
+      width:20px; height:20px; border-radius:6px; background:#FFBF00; color:#21242b;
+      font-weight:900; font-size:11px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    }
+
+    .menu-buttons { display:flex; flex-direction:column; gap:8px; }
+    .btn-start {
+      border:0; border-radius:15px; width:100%; padding:15px;
+      font:900 17px inherit; font-weight:900 !important;
+      color:#21242b; background:linear-gradient(135deg,#FFE082,#FFBF00);
+      box-shadow:0 8px 24px rgba(255,191,0,.45); cursor:pointer;
+      transition:transform .1s, box-shadow .2s;
+    }
+    .btn-start:active { transform:scale(.98); }
+
+    .btn-leader {
+      border: 1px solid #1a1d24; border-radius: 13px; width: 100%; padding: 11px;
+      font: 700 13px inherit; color: #1a1d24; background: rgba(255,255,255,0.7);
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn-leader:active { background: #eee; }
+
+    /* ================= МОДАЛКА ТОП-10 ================= */
+    .lead-panel {
+      width:min(360px,100%); background:rgba(30, 34, 42, 0.96); border:1px solid rgba(255,191,0,0.3);
+      border-radius:24px; padding:22px 18px; box-shadow:0 25px 70px rgba(0,0,0,0.8);
+      color:#F4F1EA; backdrop-filter:blur(18px); transform:scale(.9); transition:transform .3s ease;
+    }
+    .modal-wrap.active .lead-panel { transform:scale(1); }
+    .lead-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+    .lead-title { font-size:17px; font-weight:800; color:#FFBF00; margin:0; }
+    .lead-close { background:none; border:none; color:#a3a7b5; font-size:22px; cursor:pointer; padding:0 4px; }
+    .lead-list { display:flex; flex-direction:column; gap:4px; max-height:290px; overflow-y:auto; padding-right:4px; }
+    .lead-item {
+      display:flex; justify-content:space-between; align-items:center; padding:7px 10px; border-radius:10px;
+      background:rgba(255,255,255,0.04); font-size:12.5px;
+    }
+    .lead-item.me { background:rgba(255,191,0,0.18); border:1px solid rgba(255,191,0,0.35); font-weight:700; color:#FFE082; }
+    .lead-rank { width:22px; font-weight:800; color:#FFBF00; }
+    .lead-name { flex:1; margin-left:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .lead-pts { font-weight:800; }
+
+    /* ================= КАССОВЫЙ ЧЕК СТЭК БЭГС ================= */
+    .receipt-slot { position:relative; width:min(350px,100%); }
+    .receipt {
+      background:#fff; color:#1d2026; padding:26px 22px 30px; border-radius:4px;
+      font-family:'Courier New', Courier, monospace; font-size:13px;
+      box-shadow:0 20px 60px rgba(0,0,0,.75); position:relative;
+      transform:translateY(-50px); opacity:0;
+      transition:transform .52s cubic-bezier(.16,1,.3,1), opacity .3s ease;
+      clip-path:polygon(
+        0% 8px, 2.5% 0px, 5% 8px, 7.5% 0px, 10% 8px, 12.5% 0px, 15% 8px, 17.5% 0px, 20% 8px, 22.5% 0px, 25% 8px, 27.5% 0px, 30% 8px, 32.5% 0px, 35% 8px, 37.5% 0px, 40% 8px, 42.5% 0px, 45% 8px, 47.5% 0px, 50% 8px, 52.5% 0px, 55% 8px, 57.5% 0px, 60% 8px, 62.5% 0px, 65% 8px, 67.5% 0px, 70% 8px, 72.5% 0px, 75% 8px, 77.5% 0px, 80% 8px, 82.5% 0px, 85% 8px, 87.5% 0px, 90% 8px, 92.5% 0px, 95% 8px, 97.5% 0px, 100% 8px,
+        100% calc(100% - 8px), 97.5% 100%, 95% calc(100% - 8px), 92.5% 100%, 90% calc(100% - 8px), 87.5% 100%, 85% calc(100% - 8px), 82.5% 100%, 80% calc(100% - 8px), 77.5% 100%, 75% calc(100% - 8px), 72.5% 100%, 70% calc(100% - 8px), 67.5% 100%, 65% calc(100% - 8px), 62.5% 100%, 60% calc(100% - 8px), 57.5% 100%, 55% calc(100% - 8px), 52.5% 100%, 50% calc(100% - 8px), 47.5% 100%, 45% calc(100% - 8px), 42.5% 100%, 40% calc(100% - 8px), 37.5% 100%, 35% calc(100% - 8px), 32.5% 100%, 30% calc(100% - 8px), 27.5% 100%, 25% calc(100% - 8px), 22.5% 100%, 20% calc(100% - 8px), 17.5% 100%, 15% calc(100% - 8px), 12.5% 100%, 10% calc(100% - 8px), 7.5% 100%, 5% calc(100% - 8px), 2.5% 100%, 0% calc(100% - 8px)
+      );
+    }
+    .modal-wrap.active .receipt { transform:translateY(0); opacity:1; }
+
+    .receipt-header { text-align:center; margin-bottom:14px; }
+    .receipt-header b { font-size:16px; letter-spacing:1px; display:block; }
+    .receipt-line { display:flex; justify-content:space-between; margin:6px 0; }
+    .receipt-divider { border-bottom:1px dashed #777; margin:10px 0; }
+    .receipt-total { font-size:17px; font-weight:bold; }
+    
+    .barcode {
+      height:36px; margin:16px auto 6px; width:80%;
+      background:repeating-linear-gradient(90deg, #111 0px, #111 2px, transparent 2px, transparent 4px, #111 4px, #111 7px, transparent 7px, transparent 9px, #111 9px, #111 10px, transparent 10px, transparent 13px);
+    }
+    .barcode-num { text-align:center; font-size:10px; letter-spacing:4px; color:#555; }
+
+    .receipt-actions { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:18px; }
+    .btn-share {
+      border:1px solid #1d2026; border-radius:12px; padding:12px 10px; font:700 13px system-ui;
+      background:#fff; color:#1d2026; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+    }
+    .btn-share:active { background:#eee; }
+    .btn-replay {
+      border:0; border-radius:12px; padding:12px 10px; font:800 14px system-ui;
+      background:#24272e; color:#FFE082; cursor:pointer;
+    }
+    .btn-replay:active { transform:scale(.98); }
+
+    /* Виньетка проигрыша */
+    #failVignette { position:fixed; inset:0; z-index:3; pointer-events:none; box-shadow:inset 0 0 0 0 rgba(255,59,48,0); transition:box-shadow .28s ease-out; }
+    #failVignette.flash { box-shadow:inset 0 0 90px 28px rgba(255,59,48,.65); }
+
+    /* Периметральный толчок */
+    #sidePulse { position:fixed; inset:0; z-index:3; pointer-events:none; box-shadow:inset 0 0 0px 0px rgba(255,191,0,0); }
+    #sidePulse.pulse { animation:perimeterPulse .48s cubic-bezier(.16,1,.3,1); }
+    body.screen-nudge #game, body.screen-nudge .hud, body.screen-nudge #hint { animation:screenNudge .26s ease-out; }
+    
+    @keyframes perimeterPulse {
+      0% { box-shadow:inset 0 0 0px 0px rgba(255,191,0,0); }
+      25% { box-shadow:inset 0 0 55px 14px rgba(255,191,0,.6); }
+      100% { box-shadow:inset 0 0 8px 0px rgba(255,191,0,0); }
+    }
+    @keyframes screenNudge {
+      0% { transform:scale(1); }
+      25% { transform:scale(.984); }
+      60% { transform:scale(1.008); }
+      100% { transform:scale(1); }
+    }
+    @media (min-width:700px) { .hud { padding:20px 24px; } #hint { bottom:28px; } }
+  </style>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="sidePulse" aria-hidden="true"></div>
+  <div id="failVignette" aria-hidden="true"></div>
+  
+  <!-- ВЕРХНИЕ ТАБЛО ОЧКОВ -->
+  <div class="hud">
+    <div class="vfd-display">
+      <div class="vfd-label">ПАКЕТЫ</div>
+      <div class="vfd-score" id="score">0</div>
+      <div class="plus-one" id="plusOne">+1</div>
+    </div>
+    <div class="vfd-display" style="text-align:right">
+      <div class="vfd-label">РЕКОРД</div>
+      <div class="vfd-score" id="best">0</div>
+      <div class="vfd-sub" id="combo">КОМБО: 0</div>
+    </div>
+  </div>
+  
+  <div id="hint">Нажми на экран, чтобы поставить пакет</div>
+
+  <!-- ГЛАВНОЕ ОКНО: СПИСОК ПОКУПОК -->
+  <div id="startOverlay" class="modal-wrap active">
+    <div class="shopping-list">
+      <div class="paper-clip"></div>
+      <div class="menu-header">
+        <div class="menu-logo">🛍️</div>
+        <h1 class="menu-title">Stack Bags</h1>
+      </div>
+
+      <div class="nick-box">
+        <label for="nickInput">Кассир:</label>
+        <input type="text" id="nickInput" class="nick-input" maxlength="15" placeholder="Введите имя..." />
+      </div>
+      
+      <div class="rules-list">
+        <div class="rule-card">
+          <span class="rule-num">1</span>
+          <span>Ставить пакеты вовремя ( тап 👆)</span>
+        </div>
+        <div class="rule-card">
+          <span class="rule-num">2</span>
+          <span>Комбо: после пятого идеального поставленного пакета, его размер увеличивается! 🔥</span>
+        </div>
+        <div class="rule-card">
+          <span class="rule-num">3</span>
+          <span>Серия: начни серию при идеальной постановке пакета ✨</span>
+        </div>
+      </div>
+
+      <div class="menu-buttons">
+        <button class="btn-start" id="playBtn"><b>Начать смену 🛍️</b></button>
+        <button class="btn-leader" id="openLeaderBtn">🏆 Список лидеров (Топ 10)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛКА ТОП 10 ЛИДЕРОВ -->
+  <div id="leadOverlay" class="modal-wrap">
+    <div class="lead-panel">
+      <div class="lead-head">
+        <h3 class="lead-title">🏆 Топ 10 кассиров</h3>
+        <button class="lead-close" id="closeLeadBtn">✕</button>
+      </div>
+      <div class="lead-list" id="leadListContainer"></div>
+    </div>
+  </div>
+
+  <!-- ОКНО ПРОИГРЫША: КАССОВЫЙ ЧЕК СТЭК БЭГС -->
+  <div id="receiptOverlay" class="modal-wrap">
+    <div class="receipt-slot">
+      <div class="receipt">
+        <div class="receipt-header">
+          <b>ООО «СТЭК БЭГС»</b>
+          <div>ДОБРО ПОЖАЛОВАТЬ!</div>
+          <div style="font-size:11px; margin-top:2px;">КАССА №01 · ЧЕК <span id="rNum">#104</span></div>
+          <div style="font-size:11px;" id="rDate"></div>
+        </div>
+        <div class="receipt-divider"></div>
+        <div class="receipt-line"><span>1. ПАКЕТ-МАЙКА</span><span id="rBagsCount">x0</span></div>
+        <div class="receipt-line"><span>2. КОМБО СЕРИЯ</span><span id="rComboCount">x0</span></div>
+        <div class="receipt-line"><span>3. СКИДКА КАССИРА</span><span>100%</span></div>
+        <div class="receipt-divider"></div>
+        <div class="receipt-line receipt-total"><span>ИТОГО К ОПЛАТЕ:</span><span id="rTotal">0 шт.</span></div>
+        <div class="receipt-line" style="color:#666; font-size:11px;"><span>РЕКОРД МАГАЗИНА:</span><span id="rBest">0 шт.</span></div>
+        <div class="receipt-divider"></div>
+        <div class="barcode"></div>
+        <div class="barcode-num">STACK-BAGS-3D-WIN</div>
+        <div class="receipt-actions">
+          <button class="btn-share" id="shareBtn">📢 Поделиться</button>
+          <button class="btn-replay" id="replayBtn">Ещё раз 🔄</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js';
+
+    // ЗВУКОВОЙ ДВИЖОК
+    let audioCtx = null;
+    function getAudio() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    function soundScanner(combo = 0) {
+      try {
+        const ctx = getAudio();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const freq = 1450 + Math.min(combo * 140, 1200);
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.07);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 0.07);
+      } catch(_) {}
+    }
+
+    function soundCashBeep() {
+      try {
+        const ctx = getAudio();
+        [1500, 1920].forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          const startTime = ctx.currentTime + idx * 0.08;
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, startTime);
+          gain.gain.setValueAtTime(0.18, startTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.065);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(startTime);
+          osc.stop(startTime + 0.065);
+        });
+      } catch(_) {}
+    }
+
+    function soundSizeGrow() {
+      try {
+        const ctx = getAudio();
+        [523.25, 659.25, 783.99, 1046.50].forEach((f, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(f, ctx.currentTime + i * 0.05);
+          gain.gain.setValueAtTime(0.16, ctx.currentTime + i * 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.05 + 0.22);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(ctx.currentTime + i * 0.05);
+          osc.stop(ctx.currentTime + i * 0.05 + 0.22);
+        });
+      } catch(_) {}
+    }
+
+    function soundMiss() {
+      try {
+        const ctx = getAudio();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(380, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.28);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 0.28);
+      } catch(_) {}
+    }
+
+    // ИНТЕРФЕЙС И НИКНЕЙМ
+    const mount = document.getElementById('game');
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const comboEl = document.getElementById('combo');
+    const hintEl = document.getElementById('hint');
+    const plusOneEl = document.getElementById('plusOne');
+    const startOverlay = document.getElementById('startOverlay');
+    const receiptOverlay = document.getElementById('receiptOverlay');
+    const leadOverlay = document.getElementById('leadOverlay');
+    const playBtn = document.getElementById('playBtn');
+    const replayBtn = document.getElementById('replayBtn');
+    const shareBtn = document.getElementById('shareBtn');
+    const openLeaderBtn = document.getElementById('openLeaderBtn');
+    const closeLeadBtn = document.getElementById('closeLeadBtn');
+    const leadListContainer = document.getElementById('leadListContainer');
+    const nickInput = document.getElementById('nickInput');
+    const failVignette = document.getElementById('failVignette');
+
+    const tg = window.Telegram?.WebApp;
+    try { tg?.ready(); tg?.expand(); } catch (_) {}
+
+    let myNickname = localStorage.getItem('stack-bags-nick') || (tg?.initDataUnsafe?.user?.first_name ? `@${tg.initDataUnsafe.user.first_name}` : 'Кассир #1');
+    nickInput.value = myNickname;
+    nickInput.addEventListener('input', () => {
+      myNickname = nickInput.value.trim() || 'Кассир #1';
+      localStorage.setItem('stack-bags-nick', myNickname);
+    });
+
+    const mockLeaders = [
+      { name: "@alex_cashier", score: 86 },
+      { name: "@anna_pro", score: 72 },
+      { name: "@max_express", score: 61 },
+      { name: "@dmitry_speed", score: 53 },
+      { name: "@elena_bags", score: 45 },
+      { name: "@ivan_retail", score: 38 },
+      { name: "@masha_check", score: 31 },
+      { name: "@vlad_stack", score: 24 },
+      { name: "@kate_fast", score: 18 }
+    ];
+
+    function renderLeaderboard() {
+      leadListContainer.innerHTML = '';
+      const list = [...mockLeaders, { name: `${myNickname} (Вы)`, score: state.best, isMe: true }];
+      list.sort((a,b) => b.score - a.score);
+      const top10 = list.slice(0, 10);
+
+      top10.forEach((item, index) => {
+        const row = document.createElement('div');
+        row.className = `lead-item ${item.isMe ? 'me' : ''}`;
+        const medals = ['🥇', '🥈', '🥉'];
+        const rankStr = index < 3 ? medals[index] : `${index + 1}.`;
+        row.innerHTML = `
+          <span class="lead-rank">${rankStr}</span>
+          <span class="lead-name">${item.name}</span>
+          <span class="lead-pts">${item.score}</span>
+        `;
+        leadListContainer.appendChild(row);
+      });
+    }
+
+    openLeaderBtn.addEventListener('click', () => {
+      renderLeaderboard();
+      leadOverlay.classList.add('active');
+    });
+    closeLeadBtn.addEventListener('click', () => {
+      leadOverlay.classList.remove('active');
+    });
+
+    // THREE.JS
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#17152b');
+    scene.fog = new THREE.Fog('#17152b', 16, 42);
+    const camera = new THREE.PerspectiveCamera(37, innerWidth / innerHeight, 0.1, 100);
+    camera.position.set(7.8, 8.8, 10.5);
+    camera.lookAt(0, 1.4, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    mount.appendChild(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xc7c7ff, 0x32203d, 1.9));
+    const key = new THREE.DirectionalLight(0xffe2b8, 3.2);
+    key.position.set(5.5, 13, 7.5); key.castShadow = true;
+    key.shadow.mapSize.set(1024,1024); scene.add(key);
+    const rim = new THREE.PointLight(0x8e7bff, 16, 28); rim.position.set(-6,5,-5); scene.add(rim);
+
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(200,200), new THREE.MeshStandardMaterial({color:0x151720, roughness:.92}));
+    floor.rotation.x = -Math.PI/2; floor.position.y = -0.56; floor.receiveShadow = true; scene.add(floor);
+
+    // ==========================================
+    // КАССОВЫЙ БОКС + РАЗДЕЛИТЕЛЬ ПАРАЛЛЕЛЬНО БАШНЕ
+    // ==========================================
+    const deskGroup = new THREE.Group();
+    const darkCabinetMat = new THREE.MeshStandardMaterial({color:0x1e2229, roughness:.75, metalness:.2});
+    const bumperChromeMat = new THREE.MeshStandardMaterial({color:0xd3d7de, roughness:.22, metalness:.85});
+    const bumperRubberMat = new THREE.MeshStandardMaterial({color:0x17191d, roughness:.85});
+    const greyBeltMat = new THREE.MeshStandardMaterial({color:0x444852, roughness:.65, metalness:.25});
+    const scannerGlassMat = new THREE.MeshStandardMaterial({color:0x14181f, roughness:.1, metalness:.85});
+
+    const legLeft = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.78, 2.7), darkCabinetMat);
+    legLeft.position.set(-2.25, -0.17, 0); legLeft.castShadow = true; legLeft.receiveShadow = true;
+    deskGroup.add(legLeft);
+
+    const shelfCavity = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.32, 0.25), new THREE.MeshBasicMaterial({color:0x0d0f13}));
+    shelfCavity.position.set(-2.25, -0.15, 1.25); deskGroup.add(shelfCavity);
+
+    const legRight = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.78, 2.7), darkCabinetMat);
+    legRight.position.set(2.2, -0.17, 0); legRight.castShadow = true; legRight.receiveShadow = true;
+    deskGroup.add(legRight);
+
+    const counterBody = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.14, 2.85), darkCabinetMat);
+    counterBody.position.set(0, 0.20, 0); counterBody.castShadow = true; counterBody.receiveShadow = true;
+    deskGroup.add(counterBody);
+
+    for (const z of [-1.43, 1.43]) {
+      const railChrome = new THREE.Mesh(new THREE.BoxGeometry(6.72, 0.16, 0.08), bumperChromeMat);
+      railChrome.position.set(0, 0.27, z); railChrome.castShadow = true; deskGroup.add(railChrome);
+      const railRubber = new THREE.Mesh(new THREE.BoxGeometry(6.73, 0.05, 0.09), bumperRubberMat);
+      railRubber.position.set(0, 0.27, z); deskGroup.add(railRubber);
+    }
+    for (const x of [-3.33, 3.33]) {
+      const railChromeEnd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 2.85), bumperChromeMat);
+      railChromeEnd.position.set(x, 0.27, 0); railChromeEnd.castShadow = true; deskGroup.add(railChromeEnd);
+      const railRubberEnd = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 2.85), bumperRubberMat);
+      railRubberEnd.position.set(x, 0.27, 0); deskGroup.add(railRubberEnd);
+    }
+
+    const beltSurface = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.02, 2.7), greyBeltMat);
+    beltSurface.position.set(0, 0.27, 0); beltSurface.receiveShadow = true; deskGroup.add(beltSurface);
+
+    for (const z of [-0.95, -0.45, 0.45, 0.95]) {
+      const groove = new THREE.Mesh(new THREE.BoxGeometry(6.48, 0.005, 0.02), new THREE.MeshBasicMaterial({color:0x2c3038}));
+      groove.position.set(0, 0.281, z); deskGroup.add(groove);
+    }
+
+    // РАЗДЕЛИТЕЛЬ: СТРОГО ПАРАЛЛЕЛЬНО БАШНЕ ИЗ ПАКЕТОВ
+    const dividerBar = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14, 0.09, 1.8),
+      new THREE.MeshStandardMaterial({color:0x1c1e24, roughness:.38, metalness:.3})
+    );
+    dividerBar.position.set(1.9, 0.32, 0);
+    dividerBar.rotation.set(0, 0, 0);
+    dividerBar.castShadow = true; deskGroup.add(dividerBar);
+
+    for (const dz of [-0.62, 0.62]) {
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.144, 0.094, 0.12), new THREE.MeshBasicMaterial({color:0xFFBF00}));
+      stripe.position.set(1.9, 0.32, dz);
+      deskGroup.add(stripe);
+    }
+
+    const equipX = -2.0;
+    const scannerBed = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.015, 1.35), bumperChromeMat);
+    scannerBed.position.set(equipX, 0.282, -0.45); deskGroup.add(scannerBed);
+
+    const scannerGlass = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.02, 0.85), scannerGlassMat);
+    scannerGlass.position.set(equipX, 0.285, -0.45); deskGroup.add(scannerGlass);
+
+    const scanLaser = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.005, 0.03), new THREE.MeshBasicMaterial({color:0xff3b30}));
+    scanLaser.position.set(equipX, 0.296, -0.45); deskGroup.add(scanLaser);
+
+    const scannerTower = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.38, 0.22), darkCabinetMat);
+    scannerTower.position.set(equipX, 0.46, -1.05); scannerTower.castShadow = true; deskGroup.add(scannerTower);
+
+    function createPosTexture() {
+      const c = document.createElement('canvas'); c.width = 256; c.height = 192;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#1e2430'; ctx.fillRect(0, 0, 256, 192);
+      ctx.fillStyle = '#007aff'; ctx.fillRect(0, 0, 256, 28);
+      ctx.fillStyle = '#ffffff'; ctx.font = 'bold 12px sans-serif';
+      ctx.fillText('POS CHECKOUT · СТЭК БЭГС', 10, 19);
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(10, 36, 108, 144);
+      ctx.fillStyle = '#1c1f26'; ctx.font = '8px monospace';
+      ctx.fillText('ЧЕК ПРОДАЖИ', 16, 52); ctx.fillText('ПАКЕТЫ СТЭК', 16, 68);
+      ctx.fillText('ИТОГО:  99.00 ₽', 16, 168);
+      const btnColors = ['#34c759', '#ff9500', '#5856d6', '#ff2d55', '#30b0c7', '#ffd60a'];
+      let bIdx = 0;
+      for (let r = 0; r < 3; r++) {
+        for (let col = 0; col < 2; col++) {
+          ctx.fillStyle = btnColors[bIdx++ % btnColors.length];
+          ctx.fillRect(128 + col * 58, 38 + r * 46, 52, 38);
+        }
+      }
+      const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+    }
+
+    const posStand = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.9, 12), new THREE.MeshStandardMaterial({color:0x22262e, metalness:.8, roughness:.2}));
+    posStand.position.set(equipX, 0.72, -1.25); posStand.castShadow = true; deskGroup.add(posStand);
+
+    const posScreenFrame = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.68, 0.06), new THREE.MeshStandardMaterial({color:0x15171c, roughness:.5}));
+    posScreenFrame.position.set(equipX, 1.25, -1.18); posScreenFrame.rotation.x = -0.20; posScreenFrame.rotation.y = 0.32;
+    posScreenFrame.castShadow = true; deskGroup.add(posScreenFrame);
+
+    const posScreenFace = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.60), new THREE.MeshBasicMaterial({map: createPosTexture()}));
+    posScreenFace.position.set(equipX, 1.25, -1.145); posScreenFace.rotation.x = -0.20; posScreenFace.rotation.y = 0.32;
+    deskGroup.add(posScreenFace);
+    scene.add(deskGroup);
+
+    // ИСКРЫ
+    const sparks = [];
+    const sparkGeo = new THREE.SphereGeometry(0.024, 6, 6);
+    const sparkMat = new THREE.MeshBasicMaterial({color:0xFFE082});
+
+    function spawnSparks(x, y, z, w, d) {
+      for (let i = 0; i < 18; i++) {
+        const s = new THREE.Mesh(sparkGeo, sparkMat);
+        s.position.set(x + (Math.random() - 0.5) * w, y + 0.15, z + (Math.random() - 0.5) * d);
+        s.userData = { vx: (Math.random() - 0.5) * 3.5, vy: 1.5 + Math.random() * 2.8, vz: (Math.random() - 0.5) * 3.5, life: 0.45 };
+        scene.add(s);
+        sparks.push(s);
+      }
+    }
+
+    // ПАКЕТЫ
+    const palette = [0x272B33, 0xF4F1EA, 0xFFBF00];
+    const darken = (hex, factor=.72) => new THREE.Color(hex).multiplyScalar(factor);
+    const bagMaterials = (color) => {
+      const c = new THREE.Color(color);
+      return [
+        new THREE.MeshStandardMaterial({color:c, roughness:.48}),
+        new THREE.MeshStandardMaterial({color:darken(color,.82), roughness:.55}),
+        new THREE.MeshStandardMaterial({color:darken(color,.68), roughness:.6}),
+        new THREE.MeshStandardMaterial({color:darken(color,1.08), roughness:.48}),
+        new THREE.MeshStandardMaterial({color:darken(color,.9), roughness:.5}),
+        new THREE.MeshStandardMaterial({color:darken(color,.75), roughness:.55})
+      ];
+    };
+
+    const state = { 
+      running:false, over:false, score:0, best:0, combo:0, maxCombo:0, stack:[], moving:null, fallingBag:null, 
+      axis:'x', direction:1, speed:3.0, time:0, targetCamY:1.4, cameraFocusY:1.4 
+    };
+    try { state.best = Number(localStorage.getItem('stack-bags-best') || 0); } catch (_) {}
+    bestEl.textContent = state.best;
+
+    function makeBag(x,y,z,w,d,color, moving=false) {
+      const group = new THREE.Group();
+      group.position.set(x,y,z);
+      const bodyH = 0.30;
+
+      const recessW = Math.min(w * 0.65, Math.max(0.12, w - 0.24));
+      const recessH = 0.065;
+      const recessD = 0.045;
+
+      if (w < 0.3 || d < 0.25 || recessW <= 0.08) {
+        const body = new THREE.Mesh(new THREE.BoxGeometry(w, bodyH, d), bagMaterials(color));
+        body.castShadow = true; body.receiveShadow = true; group.add(body);
+      } else {
+        const mainD = d - recessD;
+        const mainBody = new THREE.Mesh(new THREE.BoxGeometry(w, bodyH, mainD), bagMaterials(color));
+        mainBody.position.set(0, 0, -recessD / 2);
+        mainBody.castShadow = true; mainBody.receiveShadow = true; group.add(mainBody);
+
+        const topH = (bodyH - recessH) / 2;
+        const topFront = new THREE.Mesh(new THREE.BoxGeometry(w, topH, recessD), bagMaterials(color));
+        topFront.position.set(0, bodyH / 2 - topH / 2, d / 2 - recessD / 2);
+        topFront.castShadow = true; topFront.receiveShadow = true; group.add(topFront);
+
+        const botH = (bodyH - recessH) / 2;
+        const botFront = new THREE.Mesh(new THREE.BoxGeometry(w, botH, recessD), bagMaterials(color));
+        botFront.position.set(0, -bodyH / 2 + botH / 2, d / 2 - recessD / 2);
+        botFront.castShadow = true; botFront.receiveShadow = true; group.add(botFront);
+
+        const sideW = (w - recessW) / 2;
+        const leftFront = new THREE.Mesh(new THREE.BoxGeometry(sideW, recessH, recessD), bagMaterials(color));
+        leftFront.position.set(-w / 2 + sideW / 2, 0, d / 2 - recessD / 2);
+        leftFront.castShadow = true; leftFront.receiveShadow = true; group.add(leftFront);
+
+        const rightFront = new THREE.Mesh(new THREE.BoxGeometry(sideW, recessH, recessD), bagMaterials(color));
+        rightFront.position.set(w / 2 - sideW / 2, 0, d / 2 - recessD / 2);
+        rightFront.castShadow = true; rightFront.receiveShadow = true; group.add(rightFront);
+
+        const cavityMat = new THREE.MeshStandardMaterial({color: darken(color, 0.38), roughness: 0.92, metalness: 0.05});
+        const cavityBack = new THREE.Mesh(new THREE.PlaneGeometry(recessW * 0.99, recessH * 0.99), cavityMat);
+        cavityBack.position.set(0, 0, d / 2 - recessD + 0.001); group.add(cavityBack);
+
+        const inlayMat = new THREE.MeshStandardMaterial({color: color === 0xF4F1EA ? 0x272B33 : 0xF4F1EA, roughness: 0.75});
+        const inlay = new THREE.Mesh(new THREE.PlaneGeometry(recessW * 0.68, recessH * 0.44), inlayMat);
+        inlay.position.set(0, 0, d / 2 - recessD + 0.003); group.add(inlay);
+      }
+
+      const handleMat = new THREE.MeshStandardMaterial({color: color === 0x272B33 ? 0xF4F1EA : darken(color, .78), roughness: .72});
+      const handleSpan = Math.min(0.055, w * 0.075);
+      for (const offset of [-w * 0.18, w * 0.18]) {
+        const points = [
+          new THREE.Vector3(offset - handleSpan, bodyH * .42, d * .505),
+          new THREE.Vector3(offset - handleSpan * .75, bodyH * .62, d * .515),
+          new THREE.Vector3(offset, bodyH * .69, d * .52),
+          new THREE.Vector3(offset + handleSpan * .75, bodyH * .62, d * .515),
+          new THREE.Vector3(offset + handleSpan, bodyH * .42, d * .505)
+        ];
+        const curve = new THREE.CatmullRomCurve3(points);
+        const handle = new THREE.Mesh(new THREE.TubeGeometry(curve, 8, .009, 5, false), handleMat);
+        handle.castShadow = true; group.add(handle);
+      }
+
+      group.userData = {w, d, color, moving};
+      scene.add(group);
+      return group;
+    }
+
+    function clearGame() {
+      for (const b of state.stack) scene.remove(b);
+      if (state.moving) scene.remove(state.moving);
+      if (state.fallingBag) scene.remove(state.fallingBag);
+      state.stack = []; state.moving = null; state.fallingBag = null;
+      for (const obj of [...scene.children]) if (obj.userData?.offcut) scene.remove(obj);
+    }
+
+    function startGame() {
+      getAudio();
+      clearGame();
+      state.running = true; state.over = false; state.score = 0; state.combo = 0; state.maxCombo = 0;
+      state.speed = 3.0; state.axis = 'x'; state.direction = 1; state.time = 0;
+      scoreEl.textContent = '0'; comboEl.textContent = 'КОМБО: 0';
+      hintEl.style.opacity = '1';
+      startOverlay.classList.remove('active');
+      receiptOverlay.classList.remove('active');
+      leadOverlay.classList.remove('active');
+
+      const base = makeBag(0, 0.42, 0, 1.72, 1.38, 0xFFBF00);
+      state.stack.push(base);
+      spawnMoving();
+      state.targetCamY = 1.4;
+      camera.position.set(7.8, 8.8, 10.5);
+      camera.lookAt(0, 1.4, 0);
+    }
+
+    function spawnMoving() {
+      const top = state.stack[state.stack.length-1];
+      const {w,d} = top.userData;
+      const color = palette[state.score % palette.length];
+      state.axis = state.score % 2 === 0 ? 'x' : 'z';
+      const span = Math.max(2.15, 2.8 - state.score*.012);
+      const x = state.axis==='x' ? -span : top.position.x;
+      const z = state.axis==='z' ? -span : top.position.z;
+      state.direction = 1;
+      state.moving = makeBag(x, top.position.y + 0.30, z, w, d, color, true);
+      state.moving.userData.span = span;
+    }
+
+    function createOffcut(x,y,z,w,d,color,axis,sign) {
+      if (w < .035 || d < .035) return;
+      const piece = new THREE.Group();
+      piece.position.set(x,y,z);
+      const mat = new THREE.MeshStandardMaterial({color,roughness:.62,metalness:.01});
+      const fragment = new THREE.Mesh(new THREE.BoxGeometry(w,.30,d),mat);
+      fragment.castShadow=true; fragment.receiveShadow=true; piece.add(fragment);
+      
+      const cutMat = new THREE.MeshStandardMaterial({color:darken(color,.72),roughness:.8});
+      const cut = new THREE.Mesh(new THREE.BoxGeometry(axis==='x'?.018:w,.305,axis==='z'?.018:d),cutMat);
+      cut.position.x = axis==='x' ? -Math.sign(sign||1)*w*.48 : 0;
+      cut.position.z = axis==='z' ? -Math.sign(sign||1)*d*.48 : 0;
+      piece.add(cut);
+      piece.userData.offcut = true;
+      piece.userData.vx = axis==='x' ? sign*(1.0+Math.random()*.7) : (Math.random()-.5)*.65;
+      piece.userData.vz = axis==='z' ? sign*(1.0+Math.random()*.7) : (Math.random()-.5)*.65;
+      piece.userData.vy = .8+Math.random()*.55;
+      piece.userData.spinX = (Math.random()-.5)*1.5;
+      piece.userData.spinZ = (Math.random()-.5)*1.5;
+      piece.userData.life = 2.2;
+      scene.add(piece);
+    }
+
+    function dropPiece(piece) {
+      piece.userData.life -= 1/60;
+      piece.position.x += piece.userData.vx/60;
+      piece.position.z += piece.userData.vz/60;
+      piece.position.y += piece.userData.vy/60;
+      piece.userData.vy -= 5.8/60;
+      piece.rotation.x += piece.userData.spinX/60;
+      piece.rotation.z += piece.userData.spinZ/60;
+      piece.traverse(o => { if(o.material && 'transparent' in o.material) { o.material.transparent=true; o.material.opacity=Math.max(0,piece.userData.life/0.5); } });
+      if (piece.position.y < -3 || piece.userData.life<=0) scene.remove(piece);
+    }
+
+    function placeBag() {
+      if (!state.running || !state.moving) return;
+      const moving = state.moving, top = state.stack[state.stack.length-1];
+      const axis = state.axis;
+      const prevCenter = axis==='x' ? top.position.x : top.position.z;
+      const nextCenter = axis==='x' ? moving.position.x : moving.position.z;
+      const prevSize = axis==='x' ? top.userData.w : top.userData.d;
+      const delta = nextCenter-prevCenter;
+      const overlap = prevSize-Math.abs(delta);
+
+      if (overlap <= .025) { 
+        handleMissFall(moving, axis, Math.sign(delta) || state.direction); 
+        return; 
+      }
+
+      let oldW = moving.userData.w, oldD = moving.userData.d;
+      const color = moving.userData.color;
+      const perfect = Math.abs(delta) < .11;
+      let newCenter = (prevCenter+nextCenter)/2;
+
+      if (axis==='x') {
+        const cutW = oldW-overlap;
+        if (cutW>.025) createOffcut(newCenter + Math.sign(delta)*((overlap+cutW)/2), moving.position.y, moving.position.z, cutW, oldD, color, 'x', Math.sign(delta));
+        moving.position.x=newCenter; moving.userData.w=overlap;
+      } else {
+        const cutD=oldD-overlap;
+        if (cutD>.025) createOffcut(moving.position.x, moving.position.y, newCenter + Math.sign(delta)*((overlap+cutD)/2), oldW, cutD, color, 'z', Math.sign(delta));
+        moving.position.z=newCenter; moving.userData.d=overlap;
+      }
+      scene.remove(moving);
+
+      let finalW = moving.userData.w;
+      let finalD = moving.userData.d;
+      let sizeRestored = false;
+
+      if (perfect) {
+        state.combo++;
+        if (state.combo > state.maxCombo) state.maxCombo = state.combo;
+        soundScanner(state.combo);
+        spawnSparks(moving.position.x, moving.position.y, moving.position.z, finalW, finalD);
+
+        // Комбо: после 5-го идеального пакета размер увеличивается!
+        if (state.combo % 5 === 0) {
+          finalW = Math.min(1.72, finalW + 0.16);
+          finalD = Math.min(1.38, finalD + 0.14);
+          sizeRestored = true;
+          soundSizeGrow();
+        }
+      } else {
+        state.combo = 0;
+        soundScanner(0);
+      }
+
+      const landed = makeBag(moving.position.x, moving.position.y, moving.position.z, finalW, finalD, color);
+      state.stack.push(landed); state.moving=null;
+      state.score++;
+
+      // АНИМАЦИЯ ОЧКОВ: ПРУЖИНЯЩИЙ BUMP + ВСПЛЫВАЮЩИЙ +1
+      scoreEl.textContent = state.score;
+      scoreEl.classList.remove('bump');
+      void scoreEl.offsetWidth;
+      scoreEl.classList.add('bump');
+
+      plusOneEl.textContent = perfect ? '✨+1' : '+1';
+      plusOneEl.classList.remove('pop');
+      void plusOneEl.offsetWidth;
+      plusOneEl.classList.add('pop');
+
+      // Мягкий пик сканера каждые 10 очков
+      if (state.score % 10 === 0) {
+        soundCashBeep();
+        const pulse = document.getElementById('sidePulse');
+        document.body.classList.remove('screen-nudge');
+        pulse.classList.remove('pulse');
+        void pulse.offsetWidth;
+        document.body.classList.add('screen-nudge');
+        pulse.classList.add('pulse');
+        try { tg?.HapticFeedback?.notificationOccurred('success'); } catch (_) {}
+        setTimeout(() => { document.body.classList.remove('screen-nudge'); pulse.classList.remove('pulse'); }, 500);
+      }
+
+      comboEl.textContent = perfect ? `КОМБО: ${state.combo}` : 'КОМБО: 0';
+      try { tg?.HapticFeedback?.impactOccurred(perfect?'light':'medium'); } catch (_) {}
+
+      if (state.score > state.best) {
+        state.best = state.score; 
+        bestEl.textContent = state.best;
+        try { localStorage.setItem('stack-bags-best', String(state.best)); } catch (_) {}
+      }
+
+      if (perfect) landed.scale.set(1.015,1,1.015);
+      state.speed = Math.min(6.7, 3 + state.score * .085);
+
+      const topBagY = landed.position.y;
+      state.targetCamY = Math.max(1.4, topBagY - 0.45);
+
+      state.axis = state.score % 2 === 0 ? 'x' : 'z';
+      spawnMoving();
+
+      if (sizeRestored) {
+        hintEl.textContent = '🔥 Размер пакета увеличен!';
+      } else if (perfect) {
+        hintEl.textContent = '✨ Идеально! Продолжай серию!';
+      } else {
+        hintEl.textContent = 'Лови следующий пакет!';
+      }
+    }
+
+    function handleMissFall(fallingBag, axis, dir) {
+      state.running = false;
+      state.over = true;
+      state.moving = null;
+
+      soundMiss();
+      try { tg?.HapticFeedback?.notificationOccurred('error'); } catch (_) {}
+
+      failVignette.classList.add('flash');
+      setTimeout(() => failVignette.classList.remove('flash'), 360);
+
+      fallingBag.userData.isMissFalling = true;
+      fallingBag.userData.vx = axis === 'x' ? dir * 3.4 : (Math.random() - 0.5) * 1.2;
+      fallingBag.userData.vz = axis === 'z' ? dir * 3.4 : (Math.random() - 0.5) * 1.2;
+      fallingBag.userData.vy = 0.8;
+      fallingBag.userData.spinX = axis === 'z' ? dir * 5.0 : (Math.random() - 0.5) * 3;
+      fallingBag.userData.spinZ = axis === 'x' ? -dir * 5.0 : (Math.random() - 0.5) * 3;
+      state.fallingBag = fallingBag;
+
+      state.targetCamY = Math.max(0.7, state.cameraFocusY - 0.9);
+
+      setTimeout(() => {
+        document.getElementById('rNum').textContent = '#' + Math.floor(100 + Math.random() * 899);
+        const now = new Date();
+        document.getElementById('rDate').textContent = now.toLocaleDateString('ru-RU') + ' ' + now.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+        document.getElementById('rBagsCount').textContent = `x${state.score}`;
+        document.getElementById('rComboCount').textContent = `x${state.maxCombo}`;
+        document.getElementById('rTotal').textContent = `${state.score} шт.`;
+        document.getElementById('rBest').textContent = `${state.best} шт.`;
+
+        receiptOverlay.classList.add('active');
+        hintEl.style.opacity = '0';
+      }, 750);
+    }
+
+    shareBtn.addEventListener('click', () => {
+      const text = encodeURIComponent(`🛍️ Мой чек в «СТЭК БЭГС»: ${state.score} пакетов! (Серия комбо: ${state.maxCombo})\nСможешь собрать выше?`);
+      const url = encodeURIComponent(window.location.href);
+      if (tg?.openTelegramLink) {
+        tg.openTelegramLink(`https://t.me/share/url?url=${url}&text=${text}`);
+      } else {
+        window.open(`https://t.me/share/url?url=${url}&text=${text}`, '_blank');
+      }
+    });
+
+    playBtn.addEventListener('click', startGame);
+    replayBtn.addEventListener('click', startGame);
+
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      getAudio();
+      if (state.running) placeBag();
+    }, {passive:false});
+
+    addEventListener('keydown', e => { 
+      if (e.code==='Space' || e.code==='Enter') { 
+        e.preventDefault(); 
+        getAudio();
+        if(state.running) placeBag(); else startGame(); 
+      }
+    });
+
+    addEventListener('resize', () => {
+      camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+      renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
+    });
+
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt=Math.min(clock.getDelta(),.04);
+      state.time+=dt;
+
+      if (state.running && state.moving) {
+        const m=state.moving, span=m.userData.span;
+        const coordinate=state.axis==='x'?'x':'z';
+        m.position[coordinate]+=state.direction*state.speed*dt;
+        if (m.position[coordinate]>span) { m.position[coordinate]=span; state.direction=-1; }
+        if (m.position[coordinate]<-span) { m.position[coordinate]=-span; state.direction=1; }
+        m.rotation.y = Math.sin(state.time*2)*.035;
+      }
+
+      if (state.fallingBag) {
+        const fb = state.fallingBag;
+        fb.userData.vy -= 9.8 * dt;
+        fb.position.x += fb.userData.vx * dt;
+        fb.position.z += fb.userData.vz * dt;
+        fb.position.y += fb.userData.vy * dt;
+        fb.rotation.x += fb.userData.spinX * dt;
+        fb.rotation.z += fb.userData.spinZ * dt;
+      }
+
+      for (let i = sparks.length - 1; i >= 0; i--) {
+        const s = sparks[i];
+        s.userData.life -= dt;
+        s.userData.vy -= 9.8 * dt;
+        s.position.x += s.userData.vx * dt;
+        s.position.y += s.userData.vy * dt;
+        s.position.z += s.userData.vz * dt;
+        s.scale.multiplyScalar(0.94);
+        if (s.userData.life <= 0) {
+          scene.remove(s);
+          sparks.splice(i, 1);
+        }
+      }
+
+      for (const obj of [...scene.children]) if(obj.userData?.offcut) dropPiece(obj);
+
+      const camLerp = Math.min(1, dt * 2.8);
+      state.cameraFocusY += (state.targetCamY - state.cameraFocusY) * camLerp;
+      camera.position.y += ((state.cameraFocusY + 7.4) - camera.position.y) * camLerp;
+      camera.position.x += (7.8 - camera.position.x) * Math.min(1, dt * .7);
+      camera.position.z += (10.5 - camera.position.z) * Math.min(1, dt * .7);
+      camera.lookAt(0, state.cameraFocusY, 0);
+
+      renderer.render(scene,camera);
+    }
+    animate();
+  </script>
+</body>
+</html>
