@@ -26,7 +26,6 @@
         radial-gradient(rgba(0, 0, 0, 0.05) 1.2px, transparent 1.2px),
         linear-gradient(rgba(0,0,0,0.03) 50%, rgba(255,255,255,0.05) 50%);
       background-size: 3px 3px, 100% 4px;
-      /* Объемный 3D-корпус */
       border: 3.5px solid #1a1e25;
       border-top-color: #2c323d;
       border-bottom-color: #111317;
@@ -50,7 +49,6 @@
       line-height: 1.1;
       margin-bottom: 2px;
     }
-    /* Черные цифры со свечением #FFFFF0 */
     .vfd-score {
       font-family: 'DotGothic16', 'VT323', monospace;
       font-size: 28px;
@@ -66,7 +64,6 @@
     }
     .vfd-score.bump { animation:vfdBump .24s ease-out; }
 
-    /* Цвет комбо идентичен надписи рекорд */
     .vfd-sub {
       font-family: 'DotGothic16', 'VT323', monospace;
       font-size: 11px;
@@ -469,7 +466,6 @@
     const tg = window.Telegram?.WebApp;
     try { tg?.ready(); tg?.expand(); } catch (_) {}
 
-    // Уникальный ID игрока (из Telegram или случайный ключ устройства)
     const myUserId = tg?.initDataUnsafe?.user?.id 
       ? String(tg.initDataUnsafe.user.id) 
       : (localStorage.getItem('stack-bags-uid') || (() => {
@@ -478,7 +474,6 @@
           return uid;
         })());
 
-    // По умолчанию ник БЕЗ знака @ (чистое имя или 'Кассир #1')
     let myNickname = localStorage.getItem('stack-bags-nick') || tg?.initDataUnsafe?.user?.first_name || 'Кассир #1';
     nickInput.value = myNickname;
     nickInput.addEventListener('input', () => {
@@ -486,12 +481,10 @@
       localStorage.setItem('stack-bags-nick', myNickname);
     });
 
-    // Блокируем всплытие клавиатурных событий из поля ввода ника (чтобы пробел не запускал игру!)
     nickInput.addEventListener('keydown', (e) => {
       e.stopPropagation();
     });
 
-    // Отправка нового рекорда в Supabase
     async function syncScoreToDB(newScore) {
       try {
         await fetch(`${SUPABASE_URL}/rest/v1/leaderboard?on_conflict=user_id`, {
@@ -513,7 +506,6 @@
       }
     }
 
-    // Загрузка реального Топ-10 из Supabase
     async function renderLeaderboard() {
       leadListContainer.innerHTML = '<div style="text-align:center; padding:15px; color:#888;">Загрузка лидеров...</div>';
       try {
@@ -557,7 +549,9 @@
       leadOverlay.classList.remove('active');
     });
 
-    // THREE.JS
+    // ==========================================
+    // THREE.JS ОПТИМИЗИРОВАННАЯ СЦЕНА
+    // ==========================================
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#17152b');
     scene.fog = new THREE.Fog('#17152b', 16, 42);
@@ -565,7 +559,7 @@
     camera.position.set(7.8, 8.8, 10.5);
     camera.lookAt(0, 1.4, 0);
 
-    const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
+    const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, powerPreference:'high-performance' });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.setSize(innerWidth, innerHeight);
     renderer.shadowMap.enabled = true;
@@ -578,15 +572,34 @@
     scene.add(new THREE.HemisphereLight(0xc7c7ff, 0x32203d, 1.9));
     const key = new THREE.DirectionalLight(0xffe2b8, 3.2);
     key.position.set(5.5, 13, 7.5); key.castShadow = true;
-    key.shadow.mapSize.set(1024,1024); scene.add(key);
+    key.shadow.mapSize.set(1024, 1024);
+    key.shadow.camera.left = -10; key.shadow.camera.right = 10;
+    key.shadow.camera.top = 16; key.shadow.camera.bottom = -10;
+    scene.add(key);
     const rim = new THREE.PointLight(0x8e7bff, 16, 28); rim.position.set(-6,5,-5); scene.add(rim);
 
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(200,200), new THREE.MeshStandardMaterial({color:0x151720, roughness:.92}));
     floor.rotation.x = -Math.PI/2; floor.position.y = -0.56; floor.receiveShadow = true; scene.add(floor);
 
     // ==========================================
-    // КАССОВЫЙ БОКС + ВЫТЯНУТЫЙ РАЗДЕЛИТЕЛЬ ПАРАЛЛЕЛЬНО БАШНЕ
+    // УТИЛИТА ПОЛНОГО ОСВОБОЖДЕНИЯ ВИДЕОПАМЯТИ (GPU DISPOSE)
     // ==========================================
+    function disposeObject(obj) {
+      if (!obj) return;
+      obj.traverse(child => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => m.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
+      });
+      scene.remove(obj);
+    }
+
+    // КАССОВЫЙ БОКС
     const deskGroup = new THREE.Group();
     const darkCabinetMat = new THREE.MeshStandardMaterial({color:0x1e2229, roughness:.75, metalness:.2});
     const bumperChromeMat = new THREE.MeshStandardMaterial({color:0xd3d7de, roughness:.22, metalness:.85});
@@ -595,49 +608,49 @@
     const scannerGlassMat = new THREE.MeshStandardMaterial({color:0x14181f, roughness:.1, metalness:.85});
 
     const legLeft = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.78, 2.7), darkCabinetMat);
-    legLeft.position.set(-2.25, -0.17, 0); legLeft.castShadow = true; legLeft.receiveShadow = true;
+    legLeft.position.set(-2.25, -0.17, 0); legLeft.receiveShadow = true;
     deskGroup.add(legLeft);
 
     const shelfCavity = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.32, 0.25), new THREE.MeshBasicMaterial({color:0x0d0f13}));
     shelfCavity.position.set(-2.25, -0.15, 1.25); deskGroup.add(shelfCavity);
 
     const legRight = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.78, 2.7), darkCabinetMat);
-    legRight.position.set(2.2, -0.17, 0); legRight.castShadow = true; legRight.receiveShadow = true;
+    legRight.position.set(2.2, -0.17, 0); legRight.receiveShadow = true;
     deskGroup.add(legRight);
 
     const counterBody = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.14, 2.85), darkCabinetMat);
-    counterBody.position.set(0, 0.20, 0); counterBody.castShadow = true; counterBody.receiveShadow = true;
+    counterBody.position.set(0, 0.20, 0); counterBody.receiveShadow = true;
     deskGroup.add(counterBody);
 
     for (const z of [-1.43, 1.43]) {
       const railChrome = new THREE.Mesh(new THREE.BoxGeometry(6.72, 0.16, 0.08), bumperChromeMat);
-      railChrome.position.set(0, 0.27, z); railChrome.castShadow = true; deskGroup.add(railChrome);
+      railChrome.position.set(0, 0.27, z); deskGroup.add(railChrome);
       const railRubber = new THREE.Mesh(new THREE.BoxGeometry(6.73, 0.05, 0.09), bumperRubberMat);
       railRubber.position.set(0, 0.27, z); deskGroup.add(railRubber);
     }
     for (const x of [-3.33, 3.33]) {
       const railChromeEnd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 2.85), bumperChromeMat);
-      railChromeEnd.position.set(x, 0.27, 0); railChromeEnd.castShadow = true; deskGroup.add(railChromeEnd);
+      railChromeEnd.position.set(x, 0.27, 0); deskGroup.add(railChromeEnd);
       const railRubberEnd = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 2.85), bumperRubberMat);
       railRubberEnd.position.set(x, 0.27, 0); deskGroup.add(railRubberEnd);
     }
 
     const beltSurface = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.02, 2.7), greyBeltMat);
-    beltSurface.position.set(0, 0.27, 0); beltSurface.receiveShadow = true; deskGroup.add(beltSurface);
+    beltSurface.position.set(0, 0.27, 0); beltSurface.receiveShadow = true;
+    deskGroup.add(beltSurface);
 
     for (const z of [-0.95, -0.45, 0.45, 0.95]) {
       const groove = new THREE.Mesh(new THREE.BoxGeometry(6.48, 0.005, 0.02), new THREE.MeshBasicMaterial({color:0x2c3038}));
       groove.position.set(0, 0.281, z); deskGroup.add(groove);
     }
 
-    // РАЗДЕЛИТЕЛЬ: СТРОГО ПАРАЛЛЕЛЬНО БАШНЕ ИЗ ПАКЕТОВ
     const dividerBar = new THREE.Mesh(
       new THREE.BoxGeometry(0.14, 0.09, 1.8),
       new THREE.MeshStandardMaterial({color:0x1c1e24, roughness:.38, metalness:.3})
     );
     dividerBar.position.set(1.9, 0.32, 0);
     dividerBar.rotation.set(0, 0, 0);
-    dividerBar.castShadow = true; deskGroup.add(dividerBar);
+    deskGroup.add(dividerBar);
 
     for (const dz of [-0.62, 0.62]) {
       const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.144, 0.094, 0.12), new THREE.MeshBasicMaterial({color:0xFFBF00}));
@@ -656,7 +669,7 @@
     scanLaser.position.set(equipX, 0.296, -0.45); deskGroup.add(scanLaser);
 
     const scannerTower = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.38, 0.22), darkCabinetMat);
-    scannerTower.position.set(equipX, 0.46, -1.05); scannerTower.castShadow = true; deskGroup.add(scannerTower);
+    scannerTower.position.set(equipX, 0.46, -1.05); deskGroup.add(scannerTower);
 
     function createPosTexture() {
       const c = document.createElement('canvas'); c.width = 256; c.height = 192;
@@ -681,33 +694,36 @@
     }
 
     const posStand = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.9, 12), new THREE.MeshStandardMaterial({color:0x22262e, metalness:.8, roughness:.2}));
-    posStand.position.set(equipX, 0.72, -1.25); posStand.castShadow = true; deskGroup.add(posStand);
+    posStand.position.set(equipX, 0.72, -1.25);
+    deskGroup.add(posStand);
 
     const posScreenFrame = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.68, 0.06), new THREE.MeshStandardMaterial({color:0x15171c, roughness:.5}));
-    posScreenFrame.position.set(equipX, 1.25, -1.18); posScreenFrame.rotation.x = -0.20; posScreenFrame.rotation.y = 0.32;
-    posScreenFrame.castShadow = true; deskGroup.add(posScreenFrame);
+    posScreenFrame.position.set(equipX, 1.25, -1.18);
+    posScreenFrame.rotation.x = -0.20; posScreenFrame.rotation.y = 0.32;
+    deskGroup.add(posScreenFrame);
 
     const posScreenFace = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.60), new THREE.MeshBasicMaterial({map: createPosTexture()}));
-    posScreenFace.position.set(equipX, 1.25, -1.145); posScreenFace.rotation.x = -0.20; posScreenFace.rotation.y = 0.32;
+    posScreenFace.position.set(equipX, 1.25, -1.145);
+    posScreenFace.rotation.x = -0.20; posScreenFace.rotation.y = 0.32;
     deskGroup.add(posScreenFace);
     scene.add(deskGroup);
 
-    // ИСКРЫ
+    // ИСКРЫ И ОБРЕЗКИ (ОТДЕЛЬНЫЕ МАССИВЫ БЕЗ УТЕЧЕК ПАМЯТИ)
     const sparks = [];
-    const sparkGeo = new THREE.SphereGeometry(0.024, 6, 6);
+    const offcuts = [];
+    const sparkGeo = new THREE.SphereGeometry(0.024, 4, 4);
     const sparkMat = new THREE.MeshBasicMaterial({color:0xFFE082});
 
     function spawnSparks(x, y, z, w, d) {
-      for (let i = 0; i < 18; i++) {
+      for (let i = 0; i < 14; i++) {
         const s = new THREE.Mesh(sparkGeo, sparkMat);
         s.position.set(x + (Math.random() - 0.5) * w, y + 0.15, z + (Math.random() - 0.5) * d);
-        s.userData = { vx: (Math.random() - 0.5) * 3.5, vy: 1.5 + Math.random() * 2.8, vz: (Math.random() - 0.5) * 3.5, life: 0.45 };
+        s.userData = { vx: (Math.random() - 0.5) * 3.5, vy: 1.5 + Math.random() * 2.8, vz: (Math.random() - 0.5) * 3.5, life: 0.42 };
         scene.add(s);
         sparks.push(s);
       }
     }
 
-    // ПАКЕТЫ
     const palette = [0x272B33, 0xF4F1EA, 0xFFBF00];
     const darken = (hex, factor=.72) => new THREE.Color(hex).multiplyScalar(factor);
     const bagMaterials = (color) => {
@@ -750,21 +766,21 @@
         const topH = (bodyH - recessH) / 2;
         const topFront = new THREE.Mesh(new THREE.BoxGeometry(w, topH, recessD), bagMaterials(color));
         topFront.position.set(0, bodyH / 2 - topH / 2, d / 2 - recessD / 2);
-        topFront.castShadow = true; topFront.receiveShadow = true; group.add(topFront);
+        topFront.receiveShadow = true; group.add(topFront);
 
         const botH = (bodyH - recessH) / 2;
         const botFront = new THREE.Mesh(new THREE.BoxGeometry(w, botH, recessD), bagMaterials(color));
         botFront.position.set(0, -bodyH / 2 + botH / 2, d / 2 - recessD / 2);
-        botFront.castShadow = true; botFront.receiveShadow = true; group.add(botFront);
+        botFront.receiveShadow = true; group.add(botFront);
 
         const sideW = (w - recessW) / 2;
         const leftFront = new THREE.Mesh(new THREE.BoxGeometry(sideW, recessH, recessD), bagMaterials(color));
         leftFront.position.set(-w / 2 + sideW / 2, 0, d / 2 - recessD / 2);
-        leftFront.castShadow = true; leftFront.receiveShadow = true; group.add(leftFront);
+        leftFront.receiveShadow = true; group.add(leftFront);
 
         const rightFront = new THREE.Mesh(new THREE.BoxGeometry(sideW, recessH, recessD), bagMaterials(color));
         rightFront.position.set(w / 2 - sideW / 2, 0, d / 2 - recessD / 2);
-        rightFront.castShadow = true; rightFront.receiveShadow = true; group.add(rightFront);
+        rightFront.receiveShadow = true; group.add(rightFront);
 
         const cavityMat = new THREE.MeshStandardMaterial({color: darken(color, 0.38), roughness: 0.92, metalness: 0.05});
         const cavityBack = new THREE.Mesh(new THREE.PlaneGeometry(recessW * 0.99, recessH * 0.99), cavityMat);
@@ -786,8 +802,8 @@
           new THREE.Vector3(offset + handleSpan, bodyH * .42, d * .505)
         ];
         const curve = new THREE.CatmullRomCurve3(points);
-        const handle = new THREE.Mesh(new THREE.TubeGeometry(curve, 8, .009, 5, false), handleMat);
-        handle.castShadow = true; group.add(handle);
+        const handle = new THREE.Mesh(new THREE.TubeGeometry(curve, 6, .009, 4, false), handleMat);
+        group.add(handle);
       }
 
       group.userData = {w, d, color, moving};
@@ -795,12 +811,18 @@
       return group;
     }
 
+    // ПОЛНАЯ ОЧИСТКА ПАМЯТИ ПРИ ПЕРЕЗАПУСКЕ
     function clearGame() {
-      for (const b of state.stack) scene.remove(b);
-      if (state.moving) scene.remove(state.moving);
-      if (state.fallingBag) scene.remove(state.fallingBag);
+      for (const b of state.stack) disposeObject(b);
+      if (state.moving) disposeObject(state.moving);
+      if (state.fallingBag) disposeObject(state.fallingBag);
       state.stack = []; state.moving = null; state.fallingBag = null;
-      for (const obj of [...scene.children]) if (obj.userData?.offcut) scene.remove(obj);
+
+      for (const off of offcuts) disposeObject(off);
+      offcuts.length = 0;
+
+      for (const s of sparks) scene.remove(s);
+      sparks.length = 0;
     }
 
     function startGame() {
@@ -839,35 +861,26 @@
       if (w < .035 || d < .035) return;
       const piece = new THREE.Group();
       piece.position.set(x,y,z);
-      const mat = new THREE.MeshStandardMaterial({color,roughness:.62,metalness:.01});
-      const fragment = new THREE.Mesh(new THREE.BoxGeometry(w,.30,d),mat);
-      fragment.castShadow=true; fragment.receiveShadow=true; piece.add(fragment);
+      const mat = new THREE.MeshStandardMaterial({color, roughness:.62, metalness:.01, transparent:true, opacity:1});
+      const fragment = new THREE.Mesh(new THREE.BoxGeometry(w,.30,d), mat);
+      piece.add(fragment);
       
-      const cutMat = new THREE.MeshStandardMaterial({color:darken(color,.72),roughness:.8});
-      const cut = new THREE.Mesh(new THREE.BoxGeometry(axis==='x'?.018:w,.305,axis==='z'?.018:d),cutMat);
+      const cutMat = new THREE.MeshStandardMaterial({color:darken(color,.72), roughness:.8, transparent:true, opacity:1});
+      const cut = new THREE.Mesh(new THREE.BoxGeometry(axis==='x'?.018:w,.305,axis==='z'?.018:d), cutMat);
       cut.position.x = axis==='x' ? -Math.sign(sign||1)*w*.48 : 0;
       cut.position.z = axis==='z' ? -Math.sign(sign||1)*d*.48 : 0;
       piece.add(cut);
-      piece.userData.offcut = true;
-      piece.userData.vx = axis==='x' ? sign*(1.0+Math.random()*.7) : (Math.random()-.5)*.65;
-      piece.userData.vz = axis==='z' ? sign*(1.0+Math.random()*.7) : (Math.random()-.5)*.65;
-      piece.userData.vy = .8+Math.random()*.55;
-      piece.userData.spinX = (Math.random()-.5)*1.5;
-      piece.userData.spinZ = (Math.random()-.5)*1.5;
-      piece.userData.life = 2.2;
-      scene.add(piece);
-    }
 
-    function dropPiece(piece) {
-      piece.userData.life -= 1/60;
-      piece.position.x += piece.userData.vx/60;
-      piece.position.z += piece.userData.vz/60;
-      piece.position.y += piece.userData.vy/60;
-      piece.userData.vy -= 5.8/60;
-      piece.rotation.x += piece.userData.spinX/60;
-      piece.rotation.z += piece.userData.spinZ/60;
-      piece.traverse(o => { if(o.material && 'transparent' in o.material) { o.material.transparent=true; o.material.opacity=Math.max(0,piece.userData.life/0.5); } });
-      if (piece.position.y < -3 || piece.userData.life<=0) scene.remove(piece);
+      piece.userData = {
+        vx: axis==='x' ? sign*(1.0+Math.random()*.7) : (Math.random()-.5)*.65,
+        vz: axis==='z' ? sign*(1.0+Math.random()*.7) : (Math.random()-.5)*.65,
+        vy: .8+Math.random()*.55,
+        spinX: (Math.random()-.5)*1.5,
+        spinZ: (Math.random()-.5)*1.5,
+        life: 1.8
+      };
+      scene.add(piece);
+      offcuts.push(piece);
     }
 
     function placeBag() {
@@ -899,7 +912,7 @@
         if (cutD>.025) createOffcut(moving.position.x, moving.position.y, newCenter + Math.sign(delta)*((overlap+cutD)/2), oldW, cutD, color, 'z', Math.sign(delta));
         moving.position.z=newCenter; moving.userData.d=overlap;
       }
-      scene.remove(moving);
+      disposeObject(moving);
 
       let finalW = moving.userData.w;
       let finalD = moving.userData.d;
@@ -911,7 +924,6 @@
         soundScanner(state.combo);
         spawnSparks(moving.position.x, moving.position.y, moving.position.z, finalW, finalD);
 
-        // Комбо: после 5-го идеального пакета размер увеличивается!
         if (state.combo % 5 === 0) {
           finalW = Math.min(1.72, finalW + 0.16);
           finalD = Math.min(1.38, finalD + 0.14);
@@ -927,7 +939,6 @@
       state.stack.push(landed); state.moving=null;
       state.score++;
 
-      // АНИМАЦИЯ ОЧКОВ: ПРУЖИНЯЩИЙ BUMP + ВСПЛЫВАЮЩИЙ +1
       scoreEl.textContent = state.score;
       scoreEl.classList.remove('bump');
       void scoreEl.offsetWidth;
@@ -938,7 +949,6 @@
       void plusOneEl.offsetWidth;
       plusOneEl.classList.add('pop');
 
-      // Мягкий пик сканера каждые 10 очков
       if (state.score % 10 === 0) {
         soundCashBeep();
         const pulse = document.getElementById('sidePulse');
@@ -954,7 +964,6 @@
       comboEl.textContent = perfect ? `КОМБО: ${state.combo}` : 'КОМБО: 0';
       try { tg?.HapticFeedback?.impactOccurred(perfect?'light':'medium'); } catch (_) {}
 
-      // СОХРАНЕНИЕ РЕКОРДА И СИНХРОНИЗАЦИЯ С SUPABASE
       if (state.score > state.best) {
         state.best = state.score; 
         bestEl.textContent = state.best;
@@ -1015,7 +1024,6 @@
       }, 750);
     }
 
-    // Поделиться приложением: отправляет ссылку на вашего бота @ChizhikcityGameBot
     shareBtn.addEventListener('click', () => {
       const botUrl = encodeURIComponent('https://t.me/ChizhikcityGameBot');
       const text = encodeURIComponent(`🛍️ Мой чек в «СТЭК БЭГС»: ${state.score} пакетов! (Серия комбо: ${state.maxCombo})\nСможешь собрать башню выше? Сыграй со мной! 👇`);
@@ -1036,7 +1044,6 @@
       if (state.running) placeBag();
     }, {passive:false});
 
-    // Обработка клавиш: игнорируем нажатия, если фокус в поле ввода ника
     addEventListener('keydown', e => { 
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (e.code==='Space' || e.code==='Enter') { 
@@ -1076,6 +1083,7 @@
         fb.rotation.z += fb.userData.spinZ * dt;
       }
 
+      // Оптимизированный расчет искр
       for (let i = sparks.length - 1; i >= 0; i--) {
         const s = sparks[i];
         s.userData.life -= dt;
@@ -1083,14 +1091,32 @@
         s.position.x += s.userData.vx * dt;
         s.position.y += s.userData.vy * dt;
         s.position.z += s.userData.vz * dt;
-        s.scale.multiplyScalar(0.94);
+        s.scale.multiplyScalar(0.95);
         if (s.userData.life <= 0) {
           scene.remove(s);
           sparks.splice(i, 1);
         }
       }
 
-      for (const obj of [...scene.children]) if(obj.userData?.offcut) dropPiece(obj);
+      // Оптимизированный расчет обрезков с затуханием
+      for (let i = offcuts.length - 1; i >= 0; i--) {
+        const piece = offcuts[i];
+        piece.userData.life -= dt;
+        piece.position.x += piece.userData.vx * dt;
+        piece.position.z += piece.userData.vz * dt;
+        piece.position.y += piece.userData.vy * dt;
+        piece.userData.vy -= 9.8 * dt;
+        piece.rotation.x += piece.userData.spinX * dt;
+        piece.rotation.z += piece.userData.spinZ * dt;
+        
+        const alpha = Math.max(0, piece.userData.life / 0.5);
+        piece.children.forEach(c => { if(c.material) c.material.opacity = alpha; });
+
+        if (piece.position.y < -3 || piece.userData.life <= 0) {
+          disposeObject(piece);
+          offcuts.splice(i, 1);
+        }
+      }
 
       const camLerp = Math.min(1, dt * 2.8);
       state.cameraFocusY += (state.targetCamY - state.cameraFocusY) * camLerp;
