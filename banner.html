@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Генератор баннера 640x360</title>
+  <style>
+    body { margin:0; background:#0d0b18; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; font-family:sans-serif; color:#fff; padding:16px; box-sizing:border-box; }
+    canvas { width:100%; max-width:640px; border-radius:14px; box-shadow:0 20px 60px rgba(0,0,0,.8); border:1px solid rgba(255,191,0,.3); display:block; }
+    .btn { margin-top:18px; background:linear-gradient(135deg,#FFE082,#FFBF00); color:#111; font-weight:800; border:none; padding:14px 28px; border-radius:12px; font-size:16px; cursor:pointer; }
+    p { font-size:12px; color:#888; margin-top:10px; text-align:center; }
+  </style>
+</head>
+<body>
+  <canvas id="c" width="640" height="360"></canvas>
+  <button class="btn" id="dl">💾 Сохранить в Фото (PNG 640x360)</button>
+  <p>Или зажмите пальцем картинку ➔ «Сохранить в Фото»</p>
+
+  <script>
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+
+    // 1. Фон
+    const bgGrad = ctx.createLinearGradient(0, 0, 640, 360);
+    bgGrad.addColorStop(0, '#1c1936');
+    bgGrad.addColorStop(0.5, '#131124');
+    bgGrad.addColorStop(1, '#090812');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, 640, 360);
+
+    // Световое пятно
+    const glow = ctx.createRadialGradient(230, 210, 20, 230, 210, 260);
+    glow.addColorStop(0, 'rgba(255, 191, 0, 0.22)');
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, 640, 360);
+
+    // 2. Изометрическая кассовая лента
+    ctx.save();
+    ctx.translate(60, 160);
+
+    // Нижняя часть стола (тумба)
+    ctx.fillStyle = '#1e222a';
+    ctx.beginPath();
+    ctx.moveTo(0, 100); ctx.lineTo(260, 210); ctx.lineTo(390, 150); ctx.lineTo(130, 40); ctx.closePath();
+    ctx.fill();
+
+    // Серая рабочая лента
+    ctx.fillStyle = '#3a3e47';
+    ctx.beginPath();
+    ctx.moveTo(10, 92); ctx.lineTo(255, 195); ctx.lineTo(375, 140); ctx.lineTo(130, 42); ctx.closePath();
+    ctx.fill();
+
+    // Серебристый бортик отбойника
+    ctx.strokeStyle = '#c8ccd4';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(0, 98); ctx.lineTo(260, 208); ctx.lineTo(390, 148);
+    ctx.stroke();
+
+    // Желтый лазер сканера
+    ctx.strokeStyle = '#ff3b30';
+    ctx.lineWidth = 3;
+    ctx.shadowColor = '#ff3b30';
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.moveTo(70, 120); ctx.lineTo(140, 88);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Разделитель покупок
+    ctx.fillStyle = '#1c1e24';
+    ctx.fillRect(230, 135, 45, 8);
+    ctx.fillStyle = '#FFBF00';
+    ctx.fillRect(242, 135, 8, 8);
+
+    // 3. Башня из 3D-пакетов
+    function drawBag(cx, cy, w, h, d, color, hasNotch) {
+      // Верхняя грань
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + w, cy + w * 0.42);
+      ctx.lineTo(cx + w - d, cy + w * 0.42 + d * 0.5);
+      ctx.lineTo(cx - d, cy + d * 0.5);
+      ctx.closePath();
+      ctx.fill();
+
+      // Левая передняя грань
+      ctx.fillStyle = color === '#272B33' ? '#1b1e24' : color === '#F4F1EA' ? '#dedad0' : '#d99e00';
+      ctx.beginPath();
+      ctx.moveTo(cx - d, cy + d * 0.5);
+      ctx.lineTo(cx + w - d, cy + w * 0.42 + d * 0.5);
+      ctx.lineTo(cx + w - d, cy + w * 0.42 + d * 0.5 + h);
+      ctx.lineTo(cx - d, cy + d * 0.5 + h);
+      ctx.closePath();
+      ctx.fill();
+
+      // Правая грань
+      ctx.fillStyle = color === '#272B33' ? '#14161a' : color === '#F4F1EA' ? '#c7c2b5' : '#b88600';
+      ctx.beginPath();
+      ctx.moveTo(cx + w - d, cy + w * 0.42 + d * 0.5);
+      ctx.lineTo(cx + w, cy + w * 0.42);
+      ctx.lineTo(cx + w, cy + w * 0.42 + h);
+      ctx.lineTo(cx + w - d, cy + w * 0.42 + d * 0.5 + h);
+      ctx.closePath();
+      ctx.fill();
+
+      // Выемка на передней стенке
+      if (hasNotch) {
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(cx - d * 0.4, cy + d * 0.5 + h * 0.3, 34, 5);
+      }
+    }
+
+    // Рисуем стопку пакетов (желтый, белый, черный, желтый)
+    drawBag(150, 48, 70, 16, 50, '#FFBF00', true);
+    drawBag(150, 32, 70, 16, 50, '#272B33', true);
+    drawBag(150, 16, 70, 16, 50, '#F4F1EA', true);
+    drawBag(150, 0, 70, 16, 50, '#FFBF00', true);
+    drawBag(150, -16, 62, 16, 44, '#272B33', true);
+    drawBag(150, -32, 54, 16, 38, '#F4F1EA', true);
+
+    ctx.restore();
+
+    // 4. Текстовый логотип справа
+    ctx.shadowColor = 'rgba(255, 191, 0, 0.4)';
+    ctx.shadowBlur = 24;
+
+    ctx.fillStyle = '#F4F1EA';
+    ctx.font = '900 44px sans-serif';
+    ctx.fillText('STACK BAGS', 340, 140);
+
+    ctx.shadowBlur = 0;
+
+    // Бейдж 3D
+    ctx.fillStyle = 'linear-gradient(135deg, #FFE082, #FFBF00)';
+    ctx.fillStyle = '#FFBF00';
+    ctx.font = '900 16px sans-serif';
+    ctx.letterSpacing = '2px';
+    ctx.fillText('3D MINI APP · СТЭК БЭГС', 342, 172);
+
+    // Кассовое зеленое табло в углу баннера
+    ctx.fillStyle = '#061309';
+    ctx.strokeStyle = '#1e2430';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(340, 205, 250, 68, 12);
+    ctx.fill(); ctx.stroke();
+
+    ctx.fillStyle = '#49f585';
+    ctx.shadowColor = 'rgba(73, 245, 133, 0.8)';
+    ctx.shadowBlur = 10;
+    ctx.font = 'bold 12px monospace';
+    ctx.fillText('КАССА №01 · В РАБОТЕ', 356, 230);
+    ctx.font = '900 24px monospace';
+    ctx.fillText('РЕКОРД: 78 🛍️', 356, 258);
+    ctx.shadowBlur = 0;
+
+    // 5. Кнопка скачивания
+    document.getElementById('dl').onclick = () => {
+      const link = document.createElement('a');
+      link.download = 'stack-bags-640x360.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    };
+  </script>
+</body>
+</html>
